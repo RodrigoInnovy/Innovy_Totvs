@@ -1,0 +1,40 @@
+#INCLUDE 'TLPP-CORE.TH'
+#INCLUDE 'TOTVS.CH'
+
+Namespace custom.nfe.protheusXML
+
+/* custom.nfe.protheusXML.abreImportacaoNf */
+User Function abreImportacaoNfe()
+
+    Local aArea       := FWGetArea()  As Array
+    Local aTamanho    := {}           As Array
+
+    Local nJanLarg    := 0            As Numeric
+    Local nJanAltu    := 0            As Numeric
+    Local nPort       := 0            As Numeric
+
+    Local oWebChannel := NIL          As Object
+    Local oWebEngine  := NIL          As Object
+    Local oDlg        := NIL          As Object
+
+    Local cUrl        := ''           As Character
+
+    aTamanho := MsAdvSize()
+    nJanLarg := aTamanho[ 5 ]
+    nJanAltu := aTamanho[ 6 ]
+
+    cUrl := 'http://192.168.10.239/POUI'
+
+    DEFINE DIALOG oDlg TITLE 'Importar XML - NFE' FROM 0, 0 To nJanAltu, nJanLarg PIXEL
+
+        oWebChannel      := TWebChannel():New()
+        nPort            := oWebChannel:Connect()
+        oWebEngine       := TWebEngine():New( oDlg, 0, 0, 100, 100, , nPort )
+        oWebEngine:Align := CONTROL_ALIGN_ALLCLIENT
+        oWebEngine:Navigate( cUrl )
+
+    ACTIVATE DIALOG oDlg CENTERED
+
+    FWRestArea( aArea )
+
+Return()

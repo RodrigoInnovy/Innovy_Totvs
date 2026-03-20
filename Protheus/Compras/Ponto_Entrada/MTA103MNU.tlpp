@@ -1,0 +1,17 @@
+#INCLUDE 'TLPP-CORE.TH'
+#INCLUDE 'PROTHEUS.CH'
+
+/*-------------------------------------------------------------*
+ | P.E.:  MTA103MNU                                            |
+ | Desc:  Adiciona opção de Importação de NF-e via POUI        |
+ |        no menu de Ações do Documento de Entrada (MATA103)   |
+ *-------------------------------------------------------------*/
+User Function MTA103MNU()
+
+    Local aArea := FWGetArea()    As Array
+
+    aAdd( aRotina, { '* Importar NF-e (XML)', 'custom.nfe.protheusXML.U_abreImportacaoNfe', 0, 4, 0, NIL } )
+
+   FWRestArea( aArea )
+
+Return()

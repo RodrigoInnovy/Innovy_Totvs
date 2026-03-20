@@ -1,0 +1,664 @@
+#INCLUDE 'TLPP-CORE.TH'
+#INCLUDE 'TLPP-REST.TH'
+
+Namespace custom.nfe.poui
+
+// ====== Lista todos os Fornecedores da SA2 ======
+@Get( '/api/nfe/fornecedores' )
+User Function listFornecedor()
+
+	Local jResponse     := JsonObject():New()  As Json
+	Local jFornecedor   := NIL                 As Json
+
+	Local aFornecedores := {}                  As Array
+
+	DBSelectArea( 'SA2' )
+	SA2->( DBSetOrder( 1 ) )
+	SA2->( DBGoTop() )
+
+	While SA2->( !EoF() )
+
+		IF !SA2->( Deleted() )
+
+			jFornecedor := JsonObject():New()
+			jFornecedor[ 'cod'  ] := EncodeUTF8( AllTrim( SA2->A2_COD  ) )
+			jFornecedor[ 'loja' ] := EncodeUTF8( AllTrim( SA2->A2_LOJA ) )
+			jFornecedor[ 'nome' ] := EncodeUTF8( AllTrim( SA2->A2_NOME ) )
+			jFornecedor[ 'cnpj' ] := EncodeUTF8( AllTrim( SA2->A2_CGC  ) )
+			jFornecedor[ 'uf'   ] := EncodeUTF8( AllTrim( SA2->A2_EST  ) )
+
+			aAdd( aFornecedores, jFornecedor )
+
+		EndIF
+
+		SA2->( DBSkip() )
+
+	EndDo
+
+	IF Len( aFornecedores ) > 0
+		jResponse[ 'success' ] := .T.
+		jResponse[ 'message' ] := 'Fornecedores encontrados'
+		jResponse[ 'total'   ] := Len( aFornecedores )
+		jResponse[ 'data'    ] := aFornecedores
+	Else
+		jResponse[ 'success' ] := .F.
+		jResponse[ 'message' ] := 'Nenhum fornecedor encontrado'
+	EndIF
+
+	oRest:setKeyHeaderResponse( 'Access-Control-Allow-Origin',  '*'                           )
+	oRest:setKeyHeaderResponse( 'Access-Control-Allow-Methods', 'GET, POST, OPTIONS'          )
+	oRest:setKeyHeaderResponse( 'Access-Control-Allow-Headers', 'Content-Type, Authorization' )
+	oRest:setKeyHeaderResponse( 'Content-Type', 'application/json; charset=utf-8'             )
+	oRest:SetResponse( jResponse:ToJson()                                                     )
+
+Return( .T. )
+
+// ====== Busca Fornecedor na SA2 por Código ======
+	@Get( '/api/nfe/fornecedor' )
+User Function buscaFornecedor()
+
+	Local jResponse   := JsonObject():New()  As Json
+	Local jFornecedor := JsonObject():New()  As Json
+
+	Local cCod        := ''                  As Character
+	Local cLoja       := ''                  As Character
+
+	cCod  := AllTrim( oRest:getQueryParam( 'cod'  ) )
+	cLoja := AllTrim( oRest:getQueryParam( 'loja' ) )
+
+	IF Empty( cLoja )
+		cLoja := '01'
+	EndIF
+
+	DBSelectArea( 'SA2' )
+	SA2->( DBSetOrder( 1 ) )
+	SA2->( MsSeek( xFilial( 'SA2' ) + cCod + cLoja ) )
+
+	IF !SA2->( EoF() ) .AND. AllTrim( SA2->A2_COD ) == cCod .AND. AllTrim( SA2->A2_LOJA ) == cLoja
+
+		jFornecedor[ 'cod'  ] := EncodeUTF8( AllTrim( SA2->A2_COD  ) )
+		jFornecedor[ 'loja' ] := EncodeUTF8( AllTrim( SA2->A2_LOJA ) )
+		jFornecedor[ 'nome' ] := EncodeUTF8( AllTrim( SA2->A2_NOME ) )
+		jFornecedor[ 'cnpj' ] := EncodeUTF8( AllTrim( SA2->A2_CGC  ) )
+		jFornecedor[ 'uf'   ] := EncodeUTF8( AllTrim( SA2->A2_EST  ) )
+
+		jResponse[ 'success' ] := .T.
+		jResponse[ 'message' ] := 'Fornecedor encontrado'
+		jResponse[ 'data'    ] := jFornecedor
+
+	Else
+
+		jResponse[ 'success' ] := .F.
+		jResponse[ 'message' ] := 'Fornecedor não encontrado'
+
+	EndIF
+
+	oRest:setKeyHeaderResponse( 'Access-Control-Allow-Origin',  '*'                           )
+	oRest:setKeyHeaderResponse( 'Access-Control-Allow-Methods', 'GET, POST, OPTIONS'          )
+	oRest:setKeyHeaderResponse( 'Access-Control-Allow-Headers', 'Content-Type, Authorization' )
+	oRest:setKeyHeaderResponse( 'Content-Type', 'application/json; charset=utf-8'             )
+	oRest:SetResponse( jResponse:ToJson()                                                     )
+
+Return( .T. )
+
+// ====== Lista todas as Transportadoras da SA4 ======
+	@Get( '/api/nfe/transportadoras' )
+User Function listTransp()
+
+	Local jResponse        := JsonObject():New()  As Json
+	Local jTransportadora  := NIL                 As Json
+
+	Local aTransportadoras := {}                  As Array
+
+	DBSelectArea( 'SA4' )
+	SA4->( DBSetOrder( 1 ) )
+	SA4->( DBGoTop() )
+
+	While SA4->( !EoF() )
+
+		IF !SA4->( Deleted() )
+
+			jTransportadora := JsonObject():New()
+			jTransportadora[ 'cod'  ] := EncodeUTF8( AllTrim( SA4->A4_COD  ) )
+			jTransportadora[ 'nome' ] := EncodeUTF8( AllTrim( SA4->A4_NOME ) )
+			jTransportadora[ 'cnpj' ] := EncodeUTF8( AllTrim( SA4->A4_CGC  ) )
+
+			aAdd( aTransportadoras, jTransportadora )
+
+		EndIF
+
+		SA4->( DBSkip() )
+
+	EndDo
+
+	IF Len( aTransportadoras ) > 0
+		jResponse[ 'success' ] := .T.
+		jResponse[ 'message' ] := 'Transportadoras encontradas'
+		jResponse[ 'total'   ] := Len( aTransportadoras )
+		jResponse[ 'data'    ] := aTransportadoras
+	Else
+		jResponse[ 'success' ] := .F.
+		jResponse[ 'message' ] := 'Nenhuma transportadora encontrada'
+	EndIF
+
+	oRest:setKeyHeaderResponse( 'Access-Control-Allow-Origin',  '*'                           )
+	oRest:setKeyHeaderResponse( 'Access-Control-Allow-Methods', 'GET, POST, OPTIONS'          )
+	oRest:setKeyHeaderResponse( 'Access-Control-Allow-Headers', 'Content-Type, Authorization' )
+	oRest:setKeyHeaderResponse( 'Content-Type', 'application/json; charset=utf-8'             )
+	oRest:SetResponse( jResponse:ToJson()                                                     )
+
+Return( .T. )
+
+// ====== Busca Transportadora na SA4 por Código ======
+	@Get( '/api/nfe/transportadora' )
+User Function buscaTransp()
+
+	Local jResponse       := JsonObject():New()  As Json
+	Local jTransportadora := JsonObject():New()  As Json
+
+	Local cCod            := ''                  As Character
+
+	cCod := AllTrim( oRest:getQueryParam( 'cod' ) )
+
+	DBSelectArea( 'SA4' )
+	SA4->( DBSetOrder( 1 ) )
+	SA4->( MsSeek( xFilial( 'SA4' ) + cCod ) )
+
+	IF !SA4->( EoF() ) .AND. AllTrim( SA4->A4_COD ) == cCod
+
+		jTransportadora[ 'cod'  ] := EncodeUTF8( AllTrim( SA4->A4_COD  ) )
+		jTransportadora[ 'nome' ] := EncodeUTF8( AllTrim( SA4->A4_NOME ) )
+		jTransportadora[ 'cnpj' ] := EncodeUTF8( AllTrim( SA4->A4_CGC  ) )
+
+		jResponse[ 'success' ] := .T.
+		jResponse[ 'message' ] := 'Transportadora encontrada'
+		jResponse[ 'data'    ] := jTransportadora
+
+	Else
+
+		jResponse[ 'success' ] := .F.
+		jResponse[ 'message' ] := 'Transportadora não encontrada'
+
+	EndIF
+
+	oRest:setKeyHeaderResponse( 'Access-Control-Allow-Origin',  '*'                           )
+	oRest:setKeyHeaderResponse( 'Access-Control-Allow-Methods', 'GET, POST, OPTIONS'          )
+	oRest:setKeyHeaderResponse( 'Access-Control-Allow-Headers', 'Content-Type, Authorization' )
+	oRest:setKeyHeaderResponse( 'Content-Type', 'application/json; charset=utf-8'             )
+	oRest:SetResponse( jResponse:ToJson()                                                     )
+
+Return( .T. )
+
+// ====== Lista todas as Mensagens Padrão da SM4 ======
+	@Get( '/api/nfe/mensagens' )
+User Function nfeMensagens()
+
+	Local jResponse  := JsonObject():New()  As Json
+	Local jMensagem  := NIL                 As Json
+
+	Local aMensagens := {}                  As Array
+
+	DBSelectArea( 'SM4' )
+	SM4->( DBSetOrder( 1 ) )
+	SM4->( DBGoTop() )
+
+	While SM4->( !EoF() )
+
+		IF !SM4->( Deleted() ) .AND. SM4->M4_FILIAL == FWxFilial( 'SM4' )
+
+			jMensagem := JsonObject():New()
+			jMensagem[ 'cod' ] := EncodeUTF8( AllTrim( SM4->M4_CODIGO ) )
+
+			aAdd( aMensagens, jMensagem )
+
+		EndIF
+
+		SM4->( DBSkip() )
+
+	EndDo
+
+	IF Len( aMensagens ) > 0
+		jResponse[ 'success' ] := .T.
+		jResponse[ 'message' ] := 'Mensagens encontradas'
+		jResponse[ 'total'   ] := Len( aMensagens )
+		jResponse[ 'data'    ] := aMensagens
+	Else
+		jResponse[ 'success' ] := .F.
+		jResponse[ 'message' ] := 'Nenhuma mensagem encontrada'
+	EndIF
+
+	oRest:setKeyHeaderResponse( 'Access-Control-Allow-Origin',  '*'                           )
+	oRest:setKeyHeaderResponse( 'Access-Control-Allow-Methods', 'GET, POST, OPTIONS'          )
+	oRest:setKeyHeaderResponse( 'Access-Control-Allow-Headers', 'Content-Type, Authorization' )
+	oRest:setKeyHeaderResponse( 'Content-Type', 'application/json; charset=utf-8'             )
+	oRest:SetResponse( jResponse:ToJson()                                                     )
+
+Return( .T. )
+
+// ====== Busca Mensagem Padrão na SM4 por Código ======
+	@Get( '/api/nfe/mensagem' )
+User Function nfeMensagem()
+
+	Local jResponse := JsonObject():New()  As Json
+	Local jMensagem := JsonObject():New()  As Json
+
+	Local cCod      := ''                  As Character
+
+	cCod := AllTrim( oRest:getQueryParam( 'cod' ) )
+
+	DBSelectArea( 'SM4' )
+	SM4->( DBSetOrder( 1 ) )
+	SM4->( MsSeek( xFilial( 'SM4' ) + cCod ) )
+
+	IF !SM4->( EoF() ) .AND. SM4->M4_FILIAL == FWxFilial( 'SM4' ) .AND. AllTrim( SM4->M4_CODIGO ) == cCod
+
+		jMensagem[ 'cod'     ] := EncodeUTF8( AllTrim( SM4->M4_CODIGO ) )
+		jResponse[ 'success' ] := .T.
+		jResponse[ 'message' ] := 'Mensagem encontrada'
+		jResponse[ 'data'    ] := jMensagem
+
+	Else
+
+		jResponse[ 'success' ] := .F.
+		jResponse[ 'message' ] := 'Mensagem não encontrada'
+
+	EndIF
+
+	oRest:setKeyHeaderResponse( 'Access-Control-Allow-Origin',  '*'                           )
+	oRest:setKeyHeaderResponse( 'Access-Control-Allow-Methods', 'GET, POST, OPTIONS'          )
+	oRest:setKeyHeaderResponse( 'Access-Control-Allow-Headers', 'Content-Type, Authorization' )
+	oRest:setKeyHeaderResponse( 'Content-Type', 'application/json; charset=utf-8'             )
+	oRest:SetResponse( jResponse:ToJson()                                                     )
+
+Return( .T. )
+
+// ====== Lista todos os Produtos da SB1 ======
+	@Get( '/api/nfe/produtos' )
+User Function listProdutos()
+
+	Local jResponse := JsonObject():New()  As Json
+	Local jProduto  := NIL                 As Json
+
+	Local aProdutos := {}                  As Array
+
+	DBSelectArea( 'SB1' )
+	SB1->( DBSetOrder( 1 ) )
+	SB1->( DBGoTop() )
+
+	While SB1->( !EoF() )
+
+		IF !SB1->( Deleted() ) .AND. SB1->B1_FILIAL == FWxFilial( 'SB1' )
+
+			jProduto := JsonObject():New()
+			jProduto[ 'cod'  ] := EncodeUTF8( AllTrim( SB1->B1_COD  ) )
+			jProduto[ 'desc' ] := EncodeUTF8( AllTrim( SB1->B1_DESC ) )
+			jProduto[ 'um'   ] := EncodeUTF8( AllTrim( SB1->B1_UM   ) )
+
+			aAdd( aProdutos, jProduto )
+
+		EndIF
+
+		SB1->( DBSkip() )
+
+	EndDo
+
+	IF Len( aProdutos ) > 0
+		jResponse[ 'success' ] := .T.
+		jResponse[ 'message' ] := 'Produtos encontrados'
+		jResponse[ 'total'   ] := Len( aProdutos )
+		jResponse[ 'data'    ] := aProdutos
+	Else
+		jResponse[ 'success' ] := .F.
+		jResponse[ 'message' ] := 'Nenhum produto encontrado'
+	EndIF
+
+	oRest:setKeyHeaderResponse( 'Access-Control-Allow-Origin',  '*'                           )
+	oRest:setKeyHeaderResponse( 'Access-Control-Allow-Methods', 'GET, POST, OPTIONS'          )
+	oRest:setKeyHeaderResponse( 'Access-Control-Allow-Headers', 'Content-Type, Authorization' )
+	oRest:setKeyHeaderResponse( 'Content-Type', 'application/json; charset=utf-8'             )
+	oRest:SetResponse( jResponse:ToJson()                                                     )
+
+Return( .T. )
+
+// ====== Busca Produto na SB1 por Código ======
+	@Get( '/api/nfe/produto' )
+User Function buscaProduto()
+
+	Local jResponse := JsonObject():New()  As Json
+	Local jProduto  := JsonObject():New()  As Json
+
+	Local cCod      := ''                  As Character
+
+	cCod := AllTrim( oRest:GetQueryString( 'cod' ) )
+
+	DBSelectArea( 'SB1' )
+	SB1->( DBSetOrder( 1 ) )
+
+	IF !SB1->( Deleted() ) .AND. SB1->( MsSeek( xFilial( 'SB1' ) + cCod ) )
+
+		jProduto[ 'cod'  ] := EncodeUTF8( AllTrim( SB1->B1_COD  ) )
+		jProduto[ 'desc' ] := EncodeUTF8( AllTrim( SB1->B1_DESC ) )
+		jProduto[ 'um'   ] := EncodeUTF8( AllTrim( SB1->B1_UM   ) )
+
+		jResponse[ 'success' ] := .T.
+		jResponse[ 'message' ] := 'Produto encontrado'
+		jResponse[ 'data'    ] := jProduto
+
+	Else
+
+		jResponse[ 'success' ] := .F.
+		jResponse[ 'message' ] := 'Produto não encontrado na SB1'
+
+	EndIF
+
+	oRest:setKeyHeaderResponse( 'Access-Control-Allow-Origin',  '*'                           )
+	oRest:setKeyHeaderResponse( 'Access-Control-Allow-Methods', 'GET, POST, OPTIONS'          )
+	oRest:setKeyHeaderResponse( 'Access-Control-Allow-Headers', 'Content-Type, Authorization' )
+	oRest:setKeyHeaderResponse( 'Content-Type', 'application/json; charset=utf-8'             )
+	oRest:SetResponse( jResponse:ToJson()                                                     )
+
+Return( .T. )
+
+
+// ====== Busca Produto via Amarração SA5 (Produto x Fornecedor) ======
+// codXml - A5_PRODUTO | Fornecedor - A5_FORNECE | Loja - A5_LOJA
+@Get( '/api/nfe/produto-fornecedor' )
+User Function buscaProdForn()
+
+	Local jResponse := JsonObject():New()  As Json
+
+	Local cCodXml   := ''                  As Character
+	Local cFornece  := ''                  As Character
+	Local cLoja     := ''                  As Character
+
+	cCodXml  := AllTrim( oRest:getQueryParam( 'codXml'     ) )
+	cFornece := AllTrim( oRest:getQueryParam( 'fornecedor' ) )
+	cLoja    := AllTrim( oRest:getQueryParam( 'loja'       ) )
+
+	jResponse[ 'success' ] := .T.
+	jResponse[ 'codXml'  ] := cCodXml
+	jResponse[ 'fornece' ] := cFornece
+	jResponse[ 'loja'    ] := cLoja
+
+	oRest:setKeyHeaderResponse( 'Content-Type', 'application/json; charset=utf-8' )
+	oRest:SetResponse( jResponse:ToJson() )
+
+Return( .T. )
+
+// ====== Lista Pedidos de Compra da SC7 filtrados por Fornecedor ======
+	@Get( '/api/nfe/pedidos' )
+User Function listPedidos()
+
+	Local jResponse    := JsonObject():New()  As Json
+	Local jPedido      := NIL                 As Json
+
+	Local aPedidos     := {}                  As Array
+
+	Local cFornece     := ''                  As Character
+	Local cLoja        := ''                  As Character
+
+	cFornece := AllTrim( oRest:getQueryParam( 'fornecedor' ) )
+	cLoja    := AllTrim( oRest:getQueryParam( 'loja'       ) )
+
+	DBSelectArea( 'SC7' )
+	SC7->( DBSetOrder( 1 ) )
+	SC7->( DBGoTop() )
+
+	While SC7->( !EoF() )
+
+		IF !SC7->( Deleted() ) .AND. SC7->C7_FILIAL == FWxFilial( 'SC7' ) .AND. SC7->C7_RESIDUO > 0
+
+			// Se fornecedor foi informado, filtra; senão traz todos
+			IF Empty( cFornece ) .OR. ( AllTrim( SC7->C7_FORNECE ) == cFornece .AND. AllTrim( SC7->C7_LOJA ) == cLoja )
+
+				jPedido := JsonObject():New()
+				jPedido[ 'numPed' ] := EncodeUTF8( AllTrim( SC7->C7_NUM     ) )
+				jPedido[ 'item'   ] := EncodeUTF8( AllTrim( SC7->C7_ITEM    ) )
+				jPedido[ 'cod'    ] := EncodeUTF8( AllTrim( SC7->C7_PRODUTO ) )
+				jPedido[ 'desc'   ] := EncodeUTF8( AllTrim( SC7->C7_DESCRI  ) )
+				jPedido[ 'quant'  ] := SC7->C7_QUANT
+				jPedido[ 'valor'  ] := SC7->C7_PRECO
+
+				aAdd( aPedidos, jPedido )
+
+			EndIF
+
+		EndIF
+
+		SC7->( DBSkip() )
+
+	EndDo
+ 
+	IF Len( aPedidos ) > 0
+		jResponse[ 'success' ] := .T.
+		jResponse[ 'message' ] := 'Pedidos encontrados'
+		jResponse[ 'total'   ] := Len( aPedidos )
+		jResponse[ 'data'    ] := aPedidos
+	Else
+		jResponse[ 'success' ] := .F.
+		jResponse[ 'message' ] := 'Nenhum pedido encontrado para este fornecedor'
+	EndIF
+
+	oRest:setKeyHeaderResponse( 'Access-Control-Allow-Origin',  '*'                           )
+	oRest:setKeyHeaderResponse( 'Access-Control-Allow-Methods', 'GET, POST, OPTIONS'          )
+	oRest:setKeyHeaderResponse( 'Access-Control-Allow-Headers', 'Content-Type, Authorization' )
+	oRest:setKeyHeaderResponse( 'Content-Type', 'application/json; charset=utf-8'             )
+	oRest:SetResponse( jResponse:ToJson()                                                     )
+
+Return( .T. )
+
+// ====== Busca Pedido de Compra na SC7 por Número + Item ======
+	@Get( '/api/nfe/pedido' )
+User Function buscaPedido()
+
+	Local jResponse := JsonObject():New()  As Json
+	Local jPedido   := JsonObject():New()  As Json
+
+	Local cNum      := ''                  As Character
+	Local cItem     := ''                  As Character
+
+	cNum  := AllTrim( oRest:getQueryParam( 'num'  ) )
+	cItem := AllTrim( oRest:getQueryParam( 'item' ) )
+
+	DBSelectArea( 'SC7' )
+	SC7->( DBSetOrder( 1 ) )
+
+	IF SC7->( MsSeek( xFilial( 'SC7' ) + cNum + cItem ) )
+
+		jPedido[ 'numPed' ] := EncodeUTF8( AllTrim( SC7->C7_NUM     ) )
+		jPedido[ 'item'   ] := EncodeUTF8( AllTrim( SC7->C7_ITEM    ) )
+		jPedido[ 'cod'    ] := EncodeUTF8( AllTrim( SC7->C7_PRODUTO ) )
+		jPedido[ 'desc'   ] := EncodeUTF8( AllTrim( SC7->C7_DESCRI  ) )
+		jPedido[ 'quant'  ] := SC7->C7_QUANT
+		jPedido[ 'valor'  ] := SC7->C7_PRECO
+
+		jResponse[ 'success' ] := .T.
+		jResponse[ 'message' ] := 'Pedido encontrado'
+		jResponse[ 'data'    ] := jPedido
+
+	Else
+
+		jResponse[ 'success' ] := .F.
+		jResponse[ 'message' ] := 'Pedido não encontrado na SC7'
+
+	EndIF
+
+	oRest:setKeyHeaderResponse( 'Access-Control-Allow-Origin',  '*'                           )
+	oRest:setKeyHeaderResponse( 'Access-Control-Allow-Methods', 'GET, POST, OPTIONS'          )
+	oRest:setKeyHeaderResponse( 'Access-Control-Allow-Headers', 'Content-Type, Authorization' )
+	oRest:setKeyHeaderResponse( 'Content-Type', 'application/json; charset=utf-8'             )
+	oRest:SetResponse( jResponse:ToJson()                                                     )
+
+Return( .T. )
+
+// ====== Lista todas as TES da SF4 ======
+	@Get( '/api/nfe/tes' )
+User Function listTes()
+
+	Local jResponse := JsonObject():New()  As Json
+	Local jTes      := NIL                 As Json
+
+	Local aTes      := {}                  As Array
+
+	DBSelectArea( 'SF4' )
+	SF4->( DBSetOrder( 1 ) )
+	SF4->( DBGoTop() )
+
+	While SF4->( !EoF() )
+
+		IF !SF4->( Deleted() ) .AND. SF4->F4_FILIAL == FWxFilial( 'SF4' )
+
+			jTes := JsonObject():New()
+			jTes[ 'cod'  ] := EncodeUTF8( AllTrim( SF4->F4_CODIGO ) )
+			jTes[ 'tipo' ] := EncodeUTF8( AllTrim( SF4->F4_TIPO   ) )
+
+			aAdd( aTes, jTes )
+
+		EndIF
+
+		SF4->( DBSkip() )
+
+	EndDo
+
+	IF Len( aTes ) > 0
+		jResponse[ 'success' ] := .T.
+		jResponse[ 'message' ] := 'TES encontradas'
+		jResponse[ 'total'   ] := Len( aTes )
+		jResponse[ 'data'    ] := aTes
+	Else
+		jResponse[ 'success' ] := .F.
+		jResponse[ 'message' ] := 'Nenhuma TES encontrada'
+	EndIF
+
+	oRest:setKeyHeaderResponse( 'Access-Control-Allow-Origin',  '*'                           )
+	oRest:setKeyHeaderResponse( 'Access-Control-Allow-Methods', 'GET, POST, OPTIONS'          )
+	oRest:setKeyHeaderResponse( 'Access-Control-Allow-Headers', 'Content-Type, Authorization' )
+	oRest:setKeyHeaderResponse( 'Content-Type', 'application/json; charset=utf-8'             )
+	oRest:SetResponse( jResponse:ToJson()                                                     )
+
+Return( .T. )
+
+// ====== Busca TES na SF4 por Código ======
+	@Get( '/api/nfe/te' )
+User Function buscaTes()
+
+	Local jResponse := JsonObject():New()  As Json
+	Local jTes      := JsonObject():New()  As Json
+
+	Local cCod      := ''                  As Character
+
+	cCod := AllTrim( oRest:getQueryParam( 'cod' ) )
+
+	DBSelectArea( 'SF4' )
+	SF4->( DBSetOrder( 1 ) )
+
+	IF SF4->( MsSeek( xFilial( 'SF4' ) + cCod ) )
+
+		jTes[ 'cod'  ] := EncodeUTF8( AllTrim( SF4->F4_CODIGO ) )
+		jTes[ 'tipo' ] := EncodeUTF8( AllTrim( SF4->F4_TIPO   ) )
+
+		jResponse[ 'success' ] := .T.
+		jResponse[ 'message' ] := 'TES encontrada'
+		jResponse[ 'data'    ] := jTes
+
+	Else
+
+		jResponse[ 'success' ] := .F.
+		jResponse[ 'message' ] := 'TES não encontrada na SF4'
+
+	EndIF
+
+	oRest:setKeyHeaderResponse( 'Access-Control-Allow-Origin',  '*'                           )
+	oRest:setKeyHeaderResponse( 'Access-Control-Allow-Methods', 'GET, POST, OPTIONS'          )
+	oRest:setKeyHeaderResponse( 'Access-Control-Allow-Headers', 'Content-Type, Authorization' )
+	oRest:setKeyHeaderResponse( 'Content-Type', 'application/json; charset=utf-8'             )
+	oRest:SetResponse( jResponse:ToJson()                                                     )
+
+Return( .T. )
+
+// ====== Lista todas as Condições de Pagamento da SE4 ======
+	@Get( '/api/nfe/condicoes' )
+User Function listCondicoes()
+
+	Local jResponse  := JsonObject():New()  As Json
+	Local jCond      := NIL                 As Json
+
+	Local aCondicoes := {}                  As Array
+
+	DBSelectArea( 'SE4' )
+	SE4->( DBSetOrder( 1 ) )
+	SE4->( DBGoTop() )
+
+	While SE4->( !EoF() )
+
+		IF !SE4->( Deleted() ) .AND. SE4->E4_FILIAL == FWxFilial( 'SE4' )
+
+			jCond := JsonObject():New()
+			jCond[ 'cod'    ] := EncodeUTF8( AllTrim( SE4->E4_CODIGO ) )
+			jCond[ 'descri' ] := EncodeUTF8( AllTrim( SE4->E4_DESCRI ) )
+			jCond[ 'tipo'   ] := EncodeUTF8( AllTrim( SE4->E4_TIPO   ) )
+
+			aAdd( aCondicoes, jCond )
+
+		EndIF
+
+		SE4->( DBSkip() )
+
+	EndDo
+
+	IF Len( aCondicoes ) > 0
+		jResponse[ 'success' ] := .T.
+		jResponse[ 'message' ] := 'Condições encontradas'
+		jResponse[ 'total'   ] := Len( aCondicoes )
+		jResponse[ 'data'    ] := aCondicoes
+	Else
+		jResponse[ 'success' ] := .F.
+		jResponse[ 'message' ] := 'Nenhuma condição encontrada'
+	EndIF
+
+	oRest:setKeyHeaderResponse( 'Access-Control-Allow-Origin',  '*'                           )
+	oRest:setKeyHeaderResponse( 'Access-Control-Allow-Methods', 'GET, POST, OPTIONS'          )
+	oRest:setKeyHeaderResponse( 'Access-Control-Allow-Headers', 'Content-Type, Authorization' )
+	oRest:setKeyHeaderResponse( 'Content-Type', 'application/json; charset=utf-8'             )
+	oRest:SetResponse( jResponse:ToJson()                                                     )
+
+Return( .T. )
+
+// ====== Busca Condição de Pagamento na SE4 por Código ======
+	@Get( '/api/nfe/condicao' )
+User Function buscaCondicao()
+
+	Local jResponse := JsonObject():New()  As Json
+	Local jCond     := JsonObject():New()  As Json
+
+	Local cCod      := ''                  As Character
+
+	cCod := AllTrim( oRest:getQueryParam( 'cod' ) )
+
+	DBSelectArea( 'SE4' )
+	SE4->( DBSetOrder( 1 ) )
+
+	IF SE4->( MsSeek( xFilial( 'SE4' ) + cCod ) )
+
+		jCond[ 'cod'    ] := EncodeUTF8( AllTrim( SE4->E4_CODIGO ) )
+		jCond[ 'descri' ] := EncodeUTF8( AllTrim( SE4->E4_DESCRI ) )
+		jCond[ 'tipo'   ] := EncodeUTF8( AllTrim( SE4->E4_TIPO   ) )
+
+		jResponse[ 'success' ] := .T.
+		jResponse[ 'message' ] := 'Condição encontrada'
+		jResponse[ 'data'    ] := jCond
+
+	Else
+
+		jResponse[ 'success' ] := .F.
+		jResponse[ 'message' ] := 'Condição de pagamento não encontrada na SE4'
+
+	EndIF
+
+	oRest:setKeyHeaderResponse( 'Access-Control-Allow-Origin',  '*'                           )
+	oRest:setKeyHeaderResponse( 'Access-Control-Allow-Methods', 'GET, POST, OPTIONS'          )
+	oRest:setKeyHeaderResponse( 'Access-Control-Allow-Headers', 'Content-Type, Authorization' )
+	oRest:setKeyHeaderResponse( 'Content-Type', 'application/json; charset=utf-8'             )
+	oRest:SetResponse( jResponse:ToJson()                                                     )
+
+Return( .T. )

@@ -1,0 +1,396 @@
+#INCLUDE 'TLPP-CORE.TH'
+#INCLUDE 'TLPP-REST.TH'
+#INCLUDE 'PROTHEUS.CH'
+
+Namespace custom.nfe.poui.execautoMATA103
+
+// ====== Importação de NF-e via POUI ======
+@Post( '/api/nfe/importar' )
+User Function importarNfe()
+
+	Local jResponse         := JsonObject():New() As Json
+	Local jBody             := NIL                As Json
+	Local jCab              := NIL                As Json
+	Local jItens            := NIL                As Json
+	Local jItem             := NIL                As Json
+	Local jIcms             := NIL                As Json
+	Local jIpi              := NIL                As Json
+	Local jII               := NIL                As Json
+	Local jPis              := NIL                As Json
+	Local jCofins           := NIL                As Json
+
+	Local aCab              := {}                 As Array
+	Local aItem             := {}                 As Array
+	Local aItens            := {}                 As Array
+	Local aParamAux         := {}                 As Array
+	Local aErrors           := {}                 As Array
+
+	Local cNum              := ''                 As Character
+	Local cErrLog           := ''                 As Character
+	Local cBodyRaw          := ''                 As Character
+	Local cTipo             := ''                 As Character
+	Local cFormul           := ''                 As Character
+
+	Local nI                := 0                  As Numeric
+
+	Private lMsErroAuto     := .F.                As Logical
+	Private lMsHelpAuto     := .T.                As Logical
+	Private lAutoErrNoFile  := .T.                As Logical
+
+	// ?? SafeTam: protege TamSx3() de retornar array vazio (array out of bounds) ??
+	// Se o campo não existir no SX3 do ambiente, usa tamanho 10 como fallback
+	#DEFINE SafeTam( cCampo ) ( IIF( Len( TamSx3( cCampo ) ) > 0, TamSx3( cCampo )[ 1 ], 10 ) )
+
+	oRest:setKeyHeaderResponse( 'Access-Control-Allow-Origin',  '*'                           )
+	oRest:setKeyHeaderResponse( 'Access-Control-Allow-Methods', 'GET, POST, OPTIONS'          )
+	oRest:setKeyHeaderResponse( 'Access-Control-Allow-Headers', 'Content-Type, Authorization' )
+	oRest:setKeyHeaderResponse( 'Content-Type', 'application/json; charset=utf-8'             )
+
+	// ?? Lê o body JSON ??????????????????????????????????????????????????????????
+	cBodyRaw := oRest:getBodyRequest()
+
+	jBody := JsonObject():New()
+
+	IF jBody:FromJson( cBodyRaw ) != NIL
+
+		oRest:setStatusCode( 400 )
+		jResponse[ 'success' ] := .F.
+		jResponse[ 'message' ] := 'JSON inválido no body da requisição'
+		oRest:SetResponse( jResponse:ToJson() )
+
+		Return( .T. )
+	EndIF
+
+	jCab   := jBody[ 'cabecalho' ]
+	jItens := jBody[ 'itens'     ]
+
+	// ?? Validações básicas ??????????????????????????????????????????????????????
+	IF jCab == NIL .OR. jItens == NIL
+
+		oRest:setStatusCode( 400 )
+		jResponse[ 'success' ] := .F.
+		jResponse[ 'message' ] := 'Body deve conter "cabecalho" e "itens"'
+		oRest:SetResponse( jResponse:ToJson() )
+
+		Return( .T. )
+	EndIF
+
+	IF Empty( jCab[ 'codFornecedor' ] )
+
+		oRest:setStatusCode( 400 )
+		jResponse[ 'success' ] := .F.
+		jResponse[ 'message' ] := 'codFornecedor é obrigatório'
+		oRest:SetResponse( jResponse:ToJson() )
+
+		Return( .T. )
+	EndIF
+
+	IF Len( jItens ) == 0
+		oRest:setStatusCode( 400 )
+
+		jResponse[ 'success' ] := .F.
+		jResponse[ 'message' ] := 'Deve haver ao menos 1 item'
+		oRest:SetResponse( jResponse:ToJson() )
+
+		Return( .T. )
+	EndIF
+
+	// ?? Numeração automática ????????????????????????????????????????????????????
+	IF !Empty( jCab[ 'numDoc' ] )
+		cNum := AllTrim( jCab[ 'numDoc' ] )
+	Else
+
+		cNum := GetSxeNum( 'SF1', 'F1_DOC' )
+
+		SF1->( DBSetOrder( 1 ) )
+
+		While SF1->( MsSeek( xFilial( 'SF1' ) + cNum ) )
+			ConfirmSX8()
+			cNum := GetSxeNum( 'SF1', 'F1_DOC' )
+		EndDo
+
+	EndIF
+
+	// ?? Monta cabeçalho ?????????????????????????????????????????????????????????
+	cTipo   := IF( AllTrim( jCab[ 'tipoNota' ] ) == 'Normal', 'N', 'D' )
+	cFormul := IF( AllTrim( jCab[ 'formProp' ] ) == 'Sim'   , 'S', 'N' )
+
+	aAdd( aCab, { 'F1_TIPO'   , cTipo                                                                , NIL } )
+	aAdd( aCab, { 'F1_FORMUL' , cFormul                                                              , NIL } )
+	aAdd( aCab, { 'F1_DOC'    , cNum                                                                 , NIL } )
+	aAdd( aCab, { 'F1_SERIE'  , PadR( AllTrim( jCab[ 'serie'          ] ), SafeTam( 'F1_SERIE'   ) ) , NIL } )
+	aAdd( aCab, { 'F1_EMISSAO', dDataBase                                                            , NIL } )
+	aAdd( aCab, { 'F1_DTDIGIT', dDataBase                                                            , NIL } )
+	aAdd( aCab, { 'F1_COND'   , PadR( AllTrim( jCab[ 'cond'           ] ), SafeTam( 'F1_COND'    ) ) , NIL } )
+	aAdd( aCab, { 'F1_FORNECE', PadR( AllTrim( jCab[ 'codFornecedor'  ] ), SafeTam( 'F1_FORNECE' ) ) , NIL } )
+	aAdd( aCab, { 'F1_LOJA'   , PadR( AllTrim( jCab[ 'lojaFornecedor' ] ), SafeTam( 'F1_LOJA'    ) ) , NIL } )
+	aAdd( aCab, { 'F1_ESPECIE', PadR( AllTrim( jCab[ 'especie'        ] ), SafeTam( 'F1_ESPECIE' ) ) , NIL } )
+	aAdd( aCab, { 'F1_MOEDA'  , 1                                                                    , NIL } )
+	aAdd( aCab, { 'F1_TXMOEDA', 1                                                                    , NIL } )
+	aAdd( aCab, { 'F1_STATUS' , 'A'                                                                  , NIL } )
+
+	IF !Empty( jCab[ 'transp' ] )
+		aAdd( aCab, { 'F1_TRANSP' , PadR( AllTrim( jCab[ 'transp' ] ), SafeTam( 'F1_TRANSP' ) )      , NIL } )
+	EndIF
+
+	IF jCab[ 'qVol' ] != NIL .AND. jCab[ 'qVol' ] > 0
+		aAdd( aCab, { 'F1_VOLUME1', jCab[ 'qVol' ]                                                   , NIL } )
+	EndIF
+
+	IF !Empty( jCab[ 'esp' ] )
+		aAdd( aCab, { 'F1_ESPECI1', PadR( AllTrim( jCab[ 'esp' ] ), SafeTam( 'F1_ESPECI1' ) )       , NIL } )
+	EndIF
+
+	// pesoB ? F1_PBRUTO   (peso bruto vindo do <pesoB> da NF-e)
+	IF jCab[ 'pesoB' ] != NIL .AND. jCab[ 'pesoB' ] > 0
+		aAdd( aCab, { 'F1_PBRUTO' , jCab[ 'pesoB' ]                                                 , NIL } )
+	EndIF
+
+	IF jCab[ 'pesoL' ] != NIL .AND. jCab[ 'pesoL' ] > 0
+		aAdd( aCab, { 'F1_PLIQUI' , jCab[ 'pesoL' ]                                                 , NIL } )
+	EndIF
+
+	IF !Empty( jCab[ 'menNota' ] )
+		aAdd( aCab, { 'F1_MENNOTA', PadR( AllTrim( jCab[ 'menNota' ] ), SafeTam( 'F1_MENNOTA' ) )   , NIL } )
+	EndIF
+
+	IF !Empty( jCab[ 'menPad' ] )
+		aAdd( aCab, { 'F1_MENPAD' , PadR( AllTrim( jCab[ 'menPad'  ] ), SafeTam( 'F1_MENPAD'  ) )   , NIL } )
+	EndIF
+
+	For nI := 1 To Len( jItens )
+
+		jItem   := jItens[ nI ]
+		jIcms   := NIL
+		jIpi    := NIL
+		jII     := NIL
+		jPis    := NIL
+		jCofins := NIL
+		aItem   := {}
+
+		// Recupera sub-objetos de impostos, se existirem
+		IF jItem[ 'imposto' ] != NIL
+			jIcms   := jItem[ 'imposto' ][ 'icms'   ]
+			jIpi    := jItem[ 'imposto' ][ 'ipi'    ]
+			jII     := jItem[ 'imposto' ][ 'ii'     ]
+			jPis    := jItem[ 'imposto' ][ 'pis'    ]
+			jCofins := jItem[ 'imposto' ][ 'cofins' ]
+		EndIF
+
+		// ===== Dados do Produto =====
+		aAdd( aItem, { 'D1_COD'    , PadR( AllTrim( jItem[ 'codProtheus'   ] ), SafeTam( 'D1_COD'    ) )   , NIL } )
+		aAdd( aItem, { 'D1_UM'     , PadR( AllTrim( jItem[ 'unidade'       ] ), SafeTam( 'D1_UM'     ) )   , NIL } )
+		aAdd( aItem, { 'D1_LOCAL'  , '01'                                                                  , NIL } )
+		aAdd( aItem, { 'D1_TES'    , PadR( AllTrim( jItem[ 'tes'           ] ), SafeTam( 'D1_TES'    ) )   , NIL } )
+		aAdd( aItem, { 'D1_POSIPI' , PadR( AllTrim( jItem[ 'ncm'           ] ), SafeTam( 'D1_POSIPI' ) )   , NIL } )
+		aAdd( aItem, { 'D1_QUANT'  , jItem[ 'quantidade'    ]                                              , NIL } )
+		aAdd( aItem, { 'D1_VUNIT'  , jItem[ 'valorUnitario' ]                                              , NIL } )
+		aAdd( aItem, { 'D1_TOTAL'  , jItem[ 'valorTotal'    ]                                              , NIL } )
+
+		// Pedido de Compra (opcionais)
+		IF !Empty( jItem[ 'numPed' ] )
+			aAdd( aItem, { 'D1_PEDIDO' , PadR( AllTrim( jItem[ 'numPed'  ] ), SafeTam( 'D1_PEDIDO' ) )    , NIL } )
+		EndIF
+
+		IF !Empty( jItem[ 'itemPed' ] )
+			aAdd( aItem, { 'D1_ITEMPC' , PadR( AllTrim( jItem[ 'itemPed' ] ), SafeTam( 'D1_ITEMPC' ) )    , NIL } )
+		EndIF
+
+		// vOutro ? Despesas aduaneiras / outras despesas acessórias
+		IF jItem[ 'vOutro' ] != NIL .AND. jItem[ 'vOutro' ] > 0
+			aAdd( aItem, { 'D1_DESPESA', jItem[ 'vOutro' ]                                                 , NIL } )
+		EndIF
+
+		// ===== ICMS =====
+		IF jIcms != NIL
+
+			IF jIcms[ 'vBC'   ] != NIL .AND. jIcms[ 'vBC'   ] > 0
+				aAdd( aItem, { 'D1_BASEICM', jIcms[ 'vBC'   ]                                             , NIL } )
+			EndIF
+
+			IF jIcms[ 'pICMS' ] != NIL .AND. jIcms[ 'pICMS' ] > 0
+				aAdd( aItem, { 'D1_PICM'   , jIcms[ 'pICMS' ]                                             , NIL } )
+			EndIF
+
+			IF jIcms[ 'vICMS' ] != NIL .AND. jIcms[ 'vICMS' ] > 0
+				aAdd( aItem, { 'D1_VALICM' , jIcms[ 'vICMS' ]                                             , NIL } )
+			EndIF
+
+		EndIF
+
+		// ===== IPI =====
+		IF jIpi != NIL
+
+			IF jIpi[ 'cEnq' ] != NIL .AND. !Empty( jIpi[ 'cEnq' ] )
+				aAdd( aItem, { 'D1_GRPCST' , PadR( AllTrim( jIpi[ 'cEnq' ] ), SafeTam( 'D1_GRPCST' ) )   , NIL } )
+			EndIF
+
+			IF jIpi[ 'vBC'  ] != NIL .AND. jIpi[ 'vBC'  ] > 0
+				aAdd( aItem, { 'D1_BASEIPI', jIpi[ 'vBC'  ]                                               , NIL } )
+			EndIF
+
+			IF jIpi[ 'pIPI' ] != NIL .AND. jIpi[ 'pIPI' ] > 0
+				aAdd( aItem, { 'D1_IPI'    , jIpi[ 'pIPI' ]                                               , NIL } )
+			EndIF
+
+			IF jIpi[ 'vIPI' ] != NIL .AND. jIpi[ 'vIPI' ] > 0
+				aAdd( aItem, { 'D1_VALIPI' , jIpi[ 'vIPI' ]                                               , NIL } )
+			EndIF
+
+		EndIF
+
+		// ===== II - Imposto de Importação =====
+		IF jII != NIL
+
+			IF jII[ 'vII' ] != NIL .AND. jII[ 'vII' ] > 0
+				aAdd( aItem, { 'D1_II'     , jII[ 'vII' ]                                                  , NIL } )
+			EndIF
+
+		EndIF
+
+		// ===== PIS =====
+		IF jPis != NIL
+
+			IF jPis[ 'vBC'  ] != NIL .AND. jPis[ 'vBC'  ] > 0
+				aAdd( aItem, { 'D1_BASIMP6', jPis[ 'vBC'  ]                                               , NIL } )
+			EndIF
+
+			IF jPis[ 'pPIS' ] != NIL .AND. jPis[ 'pPIS' ] > 0
+				aAdd( aItem, { 'D1_ALQIMP6', jPis[ 'pPIS' ]                                               , NIL } )
+			EndIF
+
+			IF jPis[ 'vPIS' ] != NIL .AND. jPis[ 'vPIS' ] > 0
+				aAdd( aItem, { 'D1_VALIMP6', jPis[ 'vPIS' ]                                               , NIL } )
+			EndIF
+
+		EndIF
+
+		// ===== COFINS =====
+		IF jCofins != NIL
+
+			IF jCofins[ 'vBC'     ] != NIL .AND. jCofins[ 'vBC'     ] > 0
+				aAdd( aItem, { 'D1_BASIMP5', jCofins[ 'vBC'     ]                                         , NIL } )
+			EndIF
+
+			IF jCofins[ 'pCOFINS' ] != NIL .AND. jCofins[ 'pCOFINS' ] > 0
+				aAdd( aItem, { 'D1_ALQIMP5', jCofins[ 'pCOFINS' ]                                         , NIL } )
+			EndIF
+
+			IF jCofins[ 'vCOFINS' ] != NIL .AND. jCofins[ 'vCOFINS' ] > 0
+				aAdd( aItem, { 'D1_VALIMP5', jCofins[ 'vCOFINS' ]                                         , NIL } )
+			EndIF
+
+		EndIF
+
+		aAdd( aItens, aItem )
+
+	Next nI
+
+	aAdd( aParamAux, { 'MV_PAR01', 2 } )
+	aAdd( aParamAux, { 'MV_PAR06', 1 } )
+
+	lMsErroAuto := .F.
+
+	MSExecAuto( { |x,y,z,k,a,b,c| MATA103( x,y,z,,,,k,a,,,b,,,,,,,,,c ) }, aCab, aItens, 3, aParamAux, {}, {}, NIL )
+
+	IF lMsErroAuto
+
+		RollBackSX8()
+
+		aErrors := getAutoGRLog()
+		aEval( aErrors, { |x| cErrLog += x + CHR( 13 ) + CHR( 10 ) } )
+
+		oRest:setStatusCode( 422 )
+		jResponse[ 'success' ] := .F.
+		jResponse[ 'message' ] := 'Erro no MATA103'
+		jResponse[ 'errors'  ] := cErrLog
+		jResponse[ 'numDoc'  ] := AllTrim( cNum )
+	Else
+		ConfirmSX8()
+		oRest:setStatusCode( 200 )
+		jResponse[ 'success' ] := .T.
+		jResponse[ 'message' ] := 'NF incluída com sucesso!'
+		jResponse[ 'numDoc'  ] := AllTrim( cNum )
+
+		// Grava CD5 se vieram dados de DI no payload
+		IF jBody['dadosDI'] != NIL .AND. Len( jBody['dadosDI'] ) > 0
+			U_GravarCd5( cNum, jBody['dadosDI'], jCab )
+		EndIF
+
+	EndIF
+
+	oRest:SetResponse( jResponse:ToJson() )
+
+Return( .T. )
+
+User Function GravarCd5( cNumDoc, jDIs, jCab )
+
+	Local jDI       := NIL  As Json
+
+	Local nI        := 0    As Numeric
+
+	Local cSeek     := ''   As Character
+
+	Local lOk       := .T.  As Logical
+
+	#DEFINE SafeTam( cCampo ) ( IIF( Len( TamSx3( cCampo ) ) > 0, TamSx3( cCampo )[ 1 ], 10 ) )
+
+	IF jDIs == NIL .OR. Len( jDIs ) == 0
+		Return( .T. )
+	EndIF
+
+	For nI := 1 To Len( jDIs )
+
+		jDI := jDIs[ nI ]
+
+		DBSelectArea( 'CD5' )
+		CD5->( DBSetOrder( 4 ) )
+
+		cSeek := xFilial( 'CD5' ) + ;
+			PadR( AllTrim( cNumDoc                  ), SafeTam( 'CD5_DOC'    ) ) + ;
+			PadR( AllTrim( jCab[ 'serie'		  ] ), SafeTam( 'CD5_SERIE'  ) ) + ;
+			PadR( AllTrim( jCab[ 'codFornecedor'  ] ), SafeTam( 'CD5_FORNEC' ) ) + ;
+			PadR( AllTrim( jCab[ 'lojaFornecedor' ] ), SafeTam( 'CD5_LOJA'   ) ) + ;
+			PadR( AllTrim( jDI[  'item'           ] ), SafeTam( 'CD5_ITEM'   ) )
+
+		IF CD5->( MsSeek( cSeek ) )
+			RecLock( 'CD5', .F. )
+		Else
+			RecLock( 'CD5', .T. )
+		EndIF
+
+		CD5->CD5_FILIAL := xFilial('CD5')
+		CD5->CD5_DOC    := PadR( AllTrim( cNumDoc                  ), SafeTam( 'CD5_DOC'    ) )
+		CD5->CD5_SERIE  := PadR( AllTrim( jCab[ 'serie'			 ] ), SafeTam( 'CD5_SERIE'  ) )
+		CD5->CD5_ESPEC  := PadR( AllTrim( jCab[ 'especie'		 ] ), SafeTam( 'CD5_ESPEC'  ) )
+		CD5->CD5_FORNEC := PadR( AllTrim( jCab[ 'codFornecedor'  ] ), SafeTam( 'CD5_FORNEC' ) )
+		CD5->CD5_LOJA   := PadR( AllTrim( jCab[ 'lojaFornecedor' ] ), SafeTam( 'CD5_LOJA'   ) )
+		CD5->CD5_ITEM   := PadR( AllTrim( jDI[  'item'           ] ), SafeTam( 'CD5_ITEM'   ) )
+		CD5->CD5_NDI    := PadR( AllTrim( jDI[  'nDI'			 ] ), SafeTam( 'CD5_NDI'    ) )
+		CD5->CD5_DOCIMP := PadR( AllTrim( jDI[  'nDI'			 ] ), SafeTam( 'CD5_DOCIMP' ) )
+		CD5->CD5_DTDI   := SToD( AllTrim( jDI[  'dDI'		     ] ) 						  )
+		CD5->CD5_LOCDES := PadR( AllTrim( jDI[  'xLocDesemb'	 ] ), SafeTam( 'CD5_LOCDES' ) )
+		CD5->CD5_UFDES  := PadR( AllTrim( jDI[  'UFDesemb'		 ] ), SafeTam( 'CD5_UFDES'  ) )
+		CD5->CD5_VTRANS := PadR( AllTrim( jDI[  'tpViaTransp'	 ] ), SafeTam( 'CD5_VTRANS' ) )
+		CD5->CD5_INTERM := PadR( AllTrim( jDI[  'tpIntermedio'   ] ), SafeTam( 'CD5_INTERM' ) )
+		CD5->CD5_NADIC  := PadR( AllTrim( jDI[  'nAdicao' 		 ] ), SafeTam( 'CD5_NADIC'  ) )
+		CD5->CD5_SQADIC := PadR( AllTrim( jDI[  'nSeqAdic' 		 ] ), SafeTam( 'CD5_SQADIC' ) )
+
+		IF !Empty( AllTrim( jDI[ 'dDesemb' ] ) )
+			CD5->CD5_DTDES := SToD( AllTrim( jDI[ 'dDesemb' ] ) )
+		EndIF
+
+		CD5->CD5_BCIMP  := jDI[ 'vBC_II'  ]
+		CD5->CD5_VLRII  := jDI[ 'vII'     ]
+		CD5->CD5_BSPIS  := jDI[ 'vBC_PIS' ]
+		CD5->CD5_ALPIS  := jDI[ 'pPIS'	  ]
+		CD5->CD5_VLPIS  := jDI[ 'vPIS'    ]
+		CD5->CD5_BSCOF  := jDI[ 'vBC_COF' ]
+		CD5->CD5_ALCOF  := jDI[ 'pCOFINS' ]
+		CD5->CD5_VLCOF  := jDI[ 'vCOFINS' ]
+
+		MsUnlock()
+
+	Next nI
+
+Return( lOk )

@@ -1,0 +1,19 @@
+#INCLUDE 'TLPP-CORE.TH'
+#INCLUDE 'RWMAKE.CH'
+#INCLUDE 'TOPCONN.CH'
+
+/*----------------------------------------------------------------------------*
+| P.E.:  MA410MNU                                                            |
+| Desc:  Adição de opção no menu de ações relacionadas do Pedido de Vendas   |
+| Links: http://tdn.totvs.com/display/public/mp/MA410MNU                     |
+ *----------------------------------------------------------------------------*/
+
+User Function MA410MNU()
+
+    Local aArea := FWGetArea()
+    
+    aadd( aRotina, { '* Simular DANFE', 'U_PREDANFE()', 0 , 4, 0 , NIL } )
+
+    FWRestArea( aArea )
+
+Return()
